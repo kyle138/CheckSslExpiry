@@ -21,5 +21,9 @@
   "bugs": {
     "url": "https://github.com/kyle138/CheckSslExpiry/issues"
   },
-  "homepage": "https://github.com/kyle138/CheckSslExpiry#readme"
+  "homepage": "https://github.com/kyle138/CheckSslExpiry#readme",
+  "dependencies": {
+    "https": "^1.0.0",
+    "ssl-utils": "^0.3.0"
+  }
 }
