@@ -1,0 +1,25 @@
+{
+  "name": "checksslexpiry",
+  "version": "1.0.0",
+  "description": "Check SSL/TLS expiration of requested domain, warn via SES if within threshholds. ",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kyle138/CheckSslExpiry.git"
+  },
+  "keywords": [
+    "Lambda",
+    "SSL",
+    "TLS",
+    "HTTPS"
+  ],
+  "author": "Kyle138",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kyle138/CheckSslExpiry/issues"
+  },
+  "homepage": "https://github.com/kyle138/CheckSslExpiry#readme"
+}
