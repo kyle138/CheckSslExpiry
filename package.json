@@ -23,7 +23,6 @@
   },
   "homepage": "https://github.com/kyle138/CheckSslExpiry#readme",
   "dependencies": {
-    "https": "^1.0.0",
-    "ssl-utils": "^0.3.0"
+    "https": "^1.0.0"
   }
 }
