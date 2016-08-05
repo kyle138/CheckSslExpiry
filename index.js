@@ -2,21 +2,10 @@
 console.log('Loading CheckSslExpiry::');
 console.log('Version 0.1');
 
+var moment = require('moment');
 var https = require('https');
-var requestDataString = '';
 
-/*
-var request = https.get('https://s3.amazonaws.com/www.kylemunz.com/deploy.json', function(response) {
-  response.on('data', function(chunkBuffer) {
-    // var data is a chunk of data from response body
-    requestDataString += chunkBuffer.toString();
-  });
-  response.on('end', function() {
-    console.log("https file received");
-    console.log(requestDataString);
-  });
-});
-*/
+var now = moment();
 
 var options = {
   host: 'www.oilandgasinvestor.com',
@@ -26,12 +15,17 @@ var options = {
 
 var req = https.request(options, function(res) {
   var cert=res.connection.getPeerCertificate();
-  //console.log(cert);
-  //cert=JSON.parse(cert);
+  var expireDate = moment(cert.valid_to, "MMM  D HH:mm:ss YYYY GMT");
+  var remaining = expireDate.diff(now, 'days');
   console.log(cert.valid_to);
+  console.log("expireDate: "+expireDate);
+  console.log("now: "+now);
+  console.log("remaining: "+remaining);
 });
 
 req.end();
+
+//Aug  8 15:51:44 2017 GMT
 
 exports.handler = (event, context, callback) => {
     // TODO implement
