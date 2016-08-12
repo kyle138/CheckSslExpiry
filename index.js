@@ -5,11 +5,11 @@ console.log('Version 0.1');
 var checkSsl = require('check-ssl-expiration');
 //Aug  8 15:51:44 2017 GMT
 
-var daysLeft = checkSsl('www.example.com', function(err, days) {
+checkSsl('www.example.com', 'days', function(err, remaining) {
   if(err) {
     console.error(err);
   } else {
-  console.log("days: "+days);
+  console.log("days: "+remaining);
   }
 });
 
