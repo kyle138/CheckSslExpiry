@@ -59,9 +59,11 @@ function processDomain(err, domain, days, callback) {
     console.error(err);
   } else {
     if (days<14) {
-      console.log("CRITICAL EXPIRATION");
+      console.log(domain+": CRITICAL");
     } else if (days<91) {
-      console.log("WARNING EXPIRATION");
+      console.log(domain+": WARNING");
+    } else {
+      console.log(domain+": OK");
     }
   }
 }
