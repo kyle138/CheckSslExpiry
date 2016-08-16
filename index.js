@@ -25,29 +25,46 @@ var ddb = new aws.DynamoDB(ddbOptions);
 //   'www.oilandgasinvestor.com'
 // ];
 
+var params = {
+  TableName: 'check-ssl-expiration_domains',
+};
+ddb.scan(params, onScan);
+
 function onScan(err, data, callback) {
   if (err) {
     console.error("Unable to scan the table. Error JSON: ",JSON.stringify(err, null, 2));
   } else {
     console.log("Scan succeeded. Items returned: "+data.Count); //DEBUG
     data.Items.forEach(function(item) {
-      console.log("Item: "+JSON.stringify(item, null, 2));  //DEBUG
+//      console.log("Item: "+item.domain.S);  //DEBUG
+      checkDomainExpiration(null, item.domain.S, checkDomainExpiration);
     });
   }
 }
 
-
-function processDomain(element, index, array) {
+function checkDomainExpiration(err, domain, callback) {
   //console.log(element);
-  checkSsl(element, 'days', function(err, remaining) {
-    if(err) {
+  checkSsl(domain, 'days', function(err, remaining) {
+    if (err) {
       console.error(err);
     } else {
-    console.log(element+": "+remaining);
+    console.log(domain+": "+remaining);
+    processDomain(null, domain, remaining);
     }
   });
 }
 
+function processDomain(err, domain, days, callback) {
+  if (err) {
+    console.error(err);
+  } else {
+    if (days<14) {
+      console.log("CRITICAL EXPIRATION");
+    } else if (days<91) {
+      console.log("WARNING EXPIRATION");
+    }
+  }
+}
 
 /*
 exports.handler = (event, context, callback) => {
