@@ -7,23 +7,17 @@ var ddbOptions = require('./ddbOptions.json');
 var aws = require('aws-sdk');
 ////
 
-
+// The required
 var checkSsl = require('check-ssl-expiration');
 var ddb = new aws.DynamoDB(ddbOptions);
 
-// var domains = [
-//   'zeusintel.com',
-//   'www.rextagstrategies.com',
-//   'accounts.hartenergy.com',
-// //  'report.hartenergynetwork.com',
-//   'secure.hartenergynetwork.com',
-//   'order.hartenergy.com',
-//   'stratasadvisors.com',
-//   'secure.oilandgasinvestor.com',
-//   'hartenergy.com',
-//   'store.hartenergy.com',
-//   'www.oilandgasinvestor.com'
-// ];
+// Config
+var crit=214;
+var warn=321;
+
+// Global
+var totalItems=0;
+var processedItems=0;
 
 var params = {
   TableName: 'check-ssl-expiration_domains',
@@ -35,37 +29,102 @@ function onScan(err, data, callback) {
     console.error("Unable to scan the table. Error JSON: ",JSON.stringify(err, null, 2));
   } else {
     console.log("Scan succeeded. Items returned: "+data.Count); //DEBUG
+    totalItems=data.Count;
     data.Items.forEach(function(item) {
-//      console.log("Item: "+item.domain.S);  //DEBUG
-      checkDomainExpiration(null, item.domain.S, checkDomainExpiration);
+      getDomainExpiration(null, item, processDomain);
     });
   }
 }
 
-function checkDomainExpiration(err, domain, callback) {
-  //console.log(element);
-  checkSsl(domain, 'days', function(err, remaining) {
+function getDomainExpiration(err, item, callback) {
+  checkSsl(item.domain.S, 'days', function(err, remaining) {
     if (err) {
       console.error(err);
     } else {
-    console.log(domain+": "+remaining);
-    processDomain(null, domain, remaining);
+//    console.log(item.domain.S+": "+remaining);
+    callback(null, item, remaining);
     }
   });
 }
 
-function processDomain(err, domain, days, callback) {
+function processDomain(err, item, days, callback) {
   if (err) {
     console.error(err);
   } else {
-    if (days<14) {
-      console.log(domain+": CRITICAL");
-    } else if (days<91) {
-      console.log(domain+": WARNING");
+    var updateParams = {
+      TableName: 'check-ssl-expiration_domains',
+      Key:{
+        "domain": item.domain
+      },
+      UpdateExpression: "SET #stat = :newStatus",
+      ExpressionAttributeNames: {
+        "#stat": "status"
+      },
+      ReturnValues:"UPDATED_NEW"
+    };
+    if (days<crit) {
+//      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
+      if (item.status.S != "CRITICAL") {
+        updateParams.ExpressionAttributeValues = {
+          ":newStatus":{"S":"CRITICAL"}
+        };
+        updateStatus(null, updateParams);
+      } else {
+        complete();
+      }
+    } else if (days<warn) {
+//      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
+      if (item.status.S != "WARNING") {
+        updateParams.ExpressionAttributeValues = {
+          ":newStatus":{"S":"WARNING"}
+        };
+        updateStatus(null, updateParams);
+      } else {
+        complete();
+      }
     } else {
-      console.log(domain+": OK");
+//      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
+      if (item.status.S != "OK") {
+        updateParams.ExpressionAttributeValues = {
+          ":newStatus":{"S":"OK"}
+        };
+        updateStatus(null, updateParams, days, notifyEmail);
+      } else {
+        complete();
+      }
     }
   }
+}
+
+function updateStatus(err, params, days, callback) {
+  if (err) {
+    console.error(err);
+  } else {
+    ddb.updateItem(params, function(err, data) {
+      if (err) {
+        console.error(err, err.stack);
+      } else {
+//        console.log("Item updated("+params.Key.domain.S+"):"+JSON.stringify(data, null, 2));  //DEBUG
+        callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete);
+      }
+    });
+  }
+}
+
+function notifyEmail(err, domain, status, days, callback) {
+  if (err) {
+    console.error(err);
+  } else {
+    //console.log("Email: "+JSON.stringify(params, null, 2));  //DEBUG
+    console.log("Email: "+domain+" "+status+" "+days+" remaining.");
+    complete();
+  }
+}
+
+function complete() {
+  processedItems++;
+  console.log("processedItems: "+processedItems+" of "+totalItems); //DEBUG
+  if(processedItems==totalItems) console.log("context.done");
 }
 
 /*
