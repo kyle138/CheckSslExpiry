@@ -1,28 +1,38 @@
 'use strict';
 console.log('Loading CheckSslExpiry::');
-console.log('Version 0.1');
+console.log('Version 0.4');
 
 //// Local only, this will be replaced by IAM Role in Lambda
 var ddbOptions = require('./ddbOptions.json');
 var aws = require('aws-sdk');
+aws.config.update({region:'us-east-1'});
 ////
 
 // The required
 var checkSsl = require('check-ssl-expiration');
 var ddb = new aws.DynamoDB(ddbOptions);
+var ses = new aws.SES();
 
 // Config
-var crit=14;
-var warn=21;
+var crit=114;
+var warn=221;
 
 // Global
 var totalItems=0;
 var processedItems=0;
 
-var params = {
-  TableName: 'check-ssl-expiration_domains',
-};
-ddb.scan(params, onScan);
+function getDomains(err, tableName, callback) {
+  if (err) {
+    console.error("Unable to get domains "+err);
+  } else if (!tableName) {
+    console.error("getDomains::tableName is a required argument.");
+  } else {
+    var params = {
+      TableName: tableName
+    };
+    ddb.scan(params, onScan);
+  }
+}
 
 function onScan(err, data, callback) {
   if (err) {
@@ -120,19 +130,47 @@ function notifyEmail(err, domain, status, days, callback) {
   } else {
     //console.log("Email: "+JSON.stringify(params, null, 2));  //DEBUG
     console.log("Email: "+domain+" "+status+" "+days+" remaining.");
-    complete();
+    var emailSubject = "SSL status for "+domain;
+    var emailBody = "Domain: "+domain+"<br/>\r\nStatus: "+status+"<br/>\r\nExpires in: "+days+" days.<br/>\r\n";
+    var emailParams = {
+      Destination: {
+            ToAddresses: ["webserveralerts@hartenergy.com"]
+      },
+      Message: {
+        Body: {
+          Html: {
+            Data: emailBody,
+            Charset: 'UTF-8'
+          }
+        },
+        Subject: {
+          Data: emailSubject,
+          Charset: 'UTF-8'
+        }
+      },
+      ReplyToAddresses: ["webserveralerts@hartenergy.com"],
+      ReturnPath: "webserveralerts@hartenergy.com",
+      Source: "webserveralerts@hartenergy.com"
+    };
+    ses.sendEmail(emailParams,function(err, data) {
+      if (err) {
+        console.log("Email did not send."+err); //DEBUG
+        //context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
+      } else {
+        console.log("Email sent."+data);  //DEBUG SES send successful
+        complete();
+      }
+    });
   }
 }
 
-function complete() {
-  processedItems++;
-  console.log("processedItems: "+processedItems+" of "+totalItems); //DEBUG
-  if(processedItems==totalItems) console.log("context.done");
-}
-
-/*
 exports.handler = (event, context, callback) => {
-    // TODO implement
-    callback(null, 'Hello from Lambda');
+  function complete() {
+    processedItems++;
+    console.log("processedItems: "+processedItems+" of "+totalItems); //DEBUG
+    if(processedItems==totalItems) console.log("context.done");
+  }
+
+  getDomains(null, 'check-ssl-expiration_domains');
+  callback(null, 'Hello from Lambda');
 };
-*/
