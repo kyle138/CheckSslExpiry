@@ -12,8 +12,8 @@ var checkSsl = require('check-ssl-expiration');
 var ddb = new aws.DynamoDB(ddbOptions);
 
 // Config
-var crit=214;
-var warn=321;
+var crit=14;
+var warn=21;
 
 // Global
 var totalItems=0;
@@ -68,7 +68,7 @@ function processDomain(err, item, days, callback) {
         updateParams.ExpressionAttributeValues = {
           ":newStatus":{"S":"CRITICAL"}
         };
-        updateStatus(null, updateParams);
+        updateStatus(null, updateParams, days, notifyEmail);
       } else {
         complete();
       }
@@ -78,7 +78,7 @@ function processDomain(err, item, days, callback) {
         updateParams.ExpressionAttributeValues = {
           ":newStatus":{"S":"WARNING"}
         };
-        updateStatus(null, updateParams);
+        updateStatus(null, updateParams, days, notifyEmail);
       } else {
         complete();
       }
@@ -97,6 +97,8 @@ function processDomain(err, item, days, callback) {
 }
 
 function updateStatus(err, params, days, callback) {
+//  console.log("updateStatus callback: "+typeof callback); //DEBUG
+
   if (err) {
     console.error(err);
   } else {
@@ -105,7 +107,8 @@ function updateStatus(err, params, days, callback) {
         console.error(err, err.stack);
       } else {
 //        console.log("Item updated("+params.Key.domain.S+"):"+JSON.stringify(data, null, 2));  //DEBUG
-        callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete);
+//        console.log("updateStatus callback: "+typeof callback); //DEBUG
+        if(typeof callback === 'function' && callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete));
       }
     });
   }
