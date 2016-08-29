@@ -3,14 +3,15 @@ console.log('Loading CheckSslExpiry::');
 console.log('Version 0.4');
 
 //// Local only, this will be replaced by IAM Role in Lambda
-var ddbOptions = require('./ddbOptions.json');
+//var ddbOptions = require('./ddbOptions.json');
 var aws = require('aws-sdk');
 aws.config.update({region:'us-east-1'});
 ////
 
 // The required
 var checkSsl = require('check-ssl-expiration');
-var ddb = new aws.DynamoDB(ddbOptions);
+//var ddb = new aws.DynamoDB(ddbOptions);
+var ddb = new aws.DynamoDB();
 var ses = new aws.SES();
 
 // Config
