@@ -80,6 +80,7 @@ exports.handler = (event, context, callback) => {
         },
         ReturnValues:"UPDATED_NEW"
       };
+      if(!item.hasOwnProperty('status.S')) item.status.S = {'S': 'Unknown'};
       if (days<crit) {
   //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
         if (item.status.S != "CRITICAL") {
@@ -102,7 +103,7 @@ exports.handler = (event, context, callback) => {
         }
       } else {
   //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
-        if (item.hasOwnProperty('status.S') && item.status.S != "OK") {
+        if (item.status.S != "OK") {
           updateParams.ExpressionAttributeValues = {
             ":newStatus":{"S":"OK"}
           };
