@@ -14,9 +14,9 @@ var checkSsl = require('check-ssl-expiration');
 var ddb = new aws.DynamoDB();
 var ses = new aws.SES();
 
-// Config
-var crit=114;
-var warn=221;
+// Config. Critical and Warning threshholds set in days.
+var crit=14;
+var warn=21;
 
 // Global
 var totalItems=0;
@@ -102,7 +102,7 @@ exports.handler = (event, context, callback) => {
         }
       } else {
   //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
-        if (item.status.S != "OK") {
+        if (item.hasOwnProperty('status.S') && item.status.S != "OK") {
           updateParams.ExpressionAttributeValues = {
             ":newStatus":{"S":"OK"}
           };
