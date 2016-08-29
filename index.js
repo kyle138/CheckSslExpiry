@@ -15,8 +15,8 @@ var ddb = new aws.DynamoDB();
 var ses = new aws.SES();
 
 // Config
-var crit=14;
-var warn=21;
+var crit=114;
+var warn=221;
 
 // Global
 var totalItems=0;
