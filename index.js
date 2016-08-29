@@ -22,155 +22,156 @@ var warn=221;
 var totalItems=0;
 var processedItems=0;
 
-function getDomains(err, tableName, callback) {
-  if (err) {
-    console.error("Unable to get domains "+err);
-  } else if (!tableName) {
-    console.error("getDomains::tableName is a required argument.");
-  } else {
-    var params = {
-      TableName: tableName
-    };
-    ddb.scan(params, onScan);
-  }
-}
+exports.handler = (event, context, callback) => {
 
-function onScan(err, data, callback) {
-  if (err) {
-    console.error("Unable to scan the table. Error JSON: ",JSON.stringify(err, null, 2));
-  } else {
-    console.log("Scan succeeded. Items returned: "+data.Count); //DEBUG
-    totalItems=data.Count;
-    data.Items.forEach(function(item) {
-      getDomainExpiration(null, item, processDomain);
+  function getDomains(err, tableName, callback) {
+    if (err) {
+      console.error("Unable to get domains "+err);
+    } else if (!tableName) {
+      console.error("getDomains::tableName is a required argument.");
+    } else {
+      var params = {
+        TableName: tableName
+      };
+      ddb.scan(params, onScan);
+    }
+  } //getDomains()
+
+  function onScan(err, data, callback) {
+    if (err) {
+      console.error("Unable to scan the table. Error JSON: ",JSON.stringify(err, null, 2));
+    } else {
+      console.log("Scan succeeded. Items returned: "+data.Count); //DEBUG
+      totalItems=data.Count;
+      data.Items.forEach(function(item) {
+        getDomainExpiration(null, item, processDomain);
+      });
+    }
+  } //onScan
+
+  function getDomainExpiration(err, item, callback) {
+    checkSsl(item.domain.S, 'days', function(err, remaining) {
+      if (err) {
+        console.error(err);
+      } else {
+  //    console.log(item.domain.S+": "+remaining);
+      callback(null, item, remaining);
+      }
     });
-  }
-}
+  } //getDomainExpiration()
 
-function getDomainExpiration(err, item, callback) {
-  checkSsl(item.domain.S, 'days', function(err, remaining) {
+  function processDomain(err, item, days, callback) {
     if (err) {
       console.error(err);
     } else {
-//    console.log(item.domain.S+": "+remaining);
-    callback(null, item, remaining);
+      var updateParams = {
+        TableName: 'check-ssl-expiration_domains',
+        Key:{
+          "domain": item.domain
+        },
+        UpdateExpression: "SET #stat = :newStatus",
+        ExpressionAttributeNames: {
+          "#stat": "status"
+        },
+        ReturnValues:"UPDATED_NEW"
+      };
+      if (days<crit) {
+  //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
+        if (item.status.S != "CRITICAL") {
+          updateParams.ExpressionAttributeValues = {
+            ":newStatus":{"S":"CRITICAL"}
+          };
+          updateStatus(null, updateParams, days, notifyEmail);
+        } else {
+          complete();
+        }
+      } else if (days<warn) {
+  //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
+        if (item.status.S != "WARNING") {
+          updateParams.ExpressionAttributeValues = {
+            ":newStatus":{"S":"WARNING"}
+          };
+          updateStatus(null, updateParams, days, notifyEmail);
+        } else {
+          complete();
+        }
+      } else {
+  //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
+        if (item.status.S != "OK") {
+          updateParams.ExpressionAttributeValues = {
+            ":newStatus":{"S":"OK"}
+          };
+          updateStatus(null, updateParams, days, notifyEmail);
+        } else {
+          complete();
+        }
+      }
     }
-  });
-}
+  } //processDomain()
 
-function processDomain(err, item, days, callback) {
-  if (err) {
-    console.error(err);
-  } else {
-    var updateParams = {
-      TableName: 'check-ssl-expiration_domains',
-      Key:{
-        "domain": item.domain
-      },
-      UpdateExpression: "SET #stat = :newStatus",
-      ExpressionAttributeNames: {
-        "#stat": "status"
-      },
-      ReturnValues:"UPDATED_NEW"
-    };
-    if (days<crit) {
-//      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
-      if (item.status.S != "CRITICAL") {
-        updateParams.ExpressionAttributeValues = {
-          ":newStatus":{"S":"CRITICAL"}
-        };
-        updateStatus(null, updateParams, days, notifyEmail);
-      } else {
-        complete();
-      }
-    } else if (days<warn) {
-//      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
-      if (item.status.S != "WARNING") {
-        updateParams.ExpressionAttributeValues = {
-          ":newStatus":{"S":"WARNING"}
-        };
-        updateStatus(null, updateParams, days, notifyEmail);
-      } else {
-        complete();
-      }
+  function updateStatus(err, params, days, callback) {
+  //  console.log("updateStatus callback: "+typeof callback); //DEBUG
+
+    if (err) {
+      console.error(err);
     } else {
-//      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
-      if (item.status.S != "OK") {
-        updateParams.ExpressionAttributeValues = {
-          ":newStatus":{"S":"OK"}
-        };
-        updateStatus(null, updateParams, days, notifyEmail);
-      } else {
-        complete();
-      }
+      ddb.updateItem(params, function(err, data) {
+        if (err) {
+          console.error(err, err.stack);
+        } else {
+  //        console.log("Item updated("+params.Key.domain.S+"):"+JSON.stringify(data, null, 2));  //DEBUG
+  //        console.log("updateStatus callback: "+typeof callback); //DEBUG
+          if(typeof callback === 'function' && callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete));
+        }
+      });
     }
-  }
-}
+  } //updateStatus()
 
-function updateStatus(err, params, days, callback) {
-//  console.log("updateStatus callback: "+typeof callback); //DEBUG
-
-  if (err) {
-    console.error(err);
-  } else {
-    ddb.updateItem(params, function(err, data) {
-      if (err) {
-        console.error(err, err.stack);
-      } else {
-//        console.log("Item updated("+params.Key.domain.S+"):"+JSON.stringify(data, null, 2));  //DEBUG
-//        console.log("updateStatus callback: "+typeof callback); //DEBUG
-        if(typeof callback === 'function' && callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete));
-      }
-    });
-  }
-}
-
-function notifyEmail(err, domain, status, days, callback) {
-  if (err) {
-    console.error(err);
-  } else {
-    //console.log("Email: "+JSON.stringify(params, null, 2));  //DEBUG
-    console.log("Email: "+domain+" "+status+" "+days+" remaining.");
-    var emailSubject = "SSL status for "+domain;
-    var emailBody = "Domain: "+domain+"<br/>\r\nStatus: "+status+"<br/>\r\nExpires in: "+days+" days.<br/>\r\n";
-    var emailParams = {
-      Destination: {
-            ToAddresses: ["webserveralerts@hartenergy.com"]
-      },
-      Message: {
-        Body: {
-          Html: {
-            Data: emailBody,
+  function notifyEmail(err, domain, status, days, callback) {
+    if (err) {
+      console.error(err);
+    } else {
+      //console.log("Email: "+JSON.stringify(params, null, 2));  //DEBUG
+      console.log("Email: "+domain+" "+status+" "+days+" remaining.");
+      var emailSubject = "SSL status for "+domain;
+      var emailBody = "Domain: "+domain+"<br/>\r\nStatus: "+status+"<br/>\r\nExpires in: "+days+" days.<br/>\r\n";
+      var emailParams = {
+        Destination: {
+              ToAddresses: ["webserveralerts@hartenergy.com"]
+        },
+        Message: {
+          Body: {
+            Html: {
+              Data: emailBody,
+              Charset: 'UTF-8'
+            }
+          },
+          Subject: {
+            Data: emailSubject,
             Charset: 'UTF-8'
           }
         },
-        Subject: {
-          Data: emailSubject,
-          Charset: 'UTF-8'
+        ReplyToAddresses: ["webserveralerts@hartenergy.com"],
+        ReturnPath: "webserveralerts@hartenergy.com",
+        Source: "webserveralerts@hartenergy.com"
+      };
+      ses.sendEmail(emailParams,function(err, data) {
+        if (err) {
+          console.log("Email did not send."+err); //DEBUG
+          //context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
+        } else {
+          console.log("Email sent."+data);  //DEBUG SES send successful
+          complete();
         }
-      },
-      ReplyToAddresses: ["webserveralerts@hartenergy.com"],
-      ReturnPath: "webserveralerts@hartenergy.com",
-      Source: "webserveralerts@hartenergy.com"
-    };
-    ses.sendEmail(emailParams,function(err, data) {
-      if (err) {
-        console.log("Email did not send."+err); //DEBUG
-        //context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
-      } else {
-        console.log("Email sent."+data);  //DEBUG SES send successful
-        complete();
-      }
-    });
-  }
-}
+      });
+    }
+  } //notifyEmail()
 
-exports.handler = (event, context, callback) => {
   function complete() {
     processedItems++;
     console.log("processedItems: "+processedItems+" of "+totalItems); //DEBUG
     if(processedItems==totalItems) console.log("context.done");
-  }
+  } //complete()
 
   getDomains(null, 'check-ssl-expiration_domains');
   callback(null, 'Hello from Lambda');
