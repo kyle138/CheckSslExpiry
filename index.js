@@ -15,8 +15,8 @@ var ddb = new aws.DynamoDB();
 var ses = new aws.SES();
 
 // Config
-var crit=114;
-var warn=221;
+var crit=14;
+var warn=21;
 
 // Global
 var totalItems=0;
@@ -27,8 +27,10 @@ exports.handler = (event, context, callback) => {
   function getDomains(err, tableName, callback) {
     if (err) {
       console.error("Unable to get domains "+err);
+      context.fail();
     } else if (!tableName) {
       console.error("getDomains::tableName is a required argument.");
+      context.fail();
     } else {
       var params = {
         TableName: tableName
@@ -40,6 +42,7 @@ exports.handler = (event, context, callback) => {
   function onScan(err, data, callback) {
     if (err) {
       console.error("Unable to scan the table. Error JSON: ",JSON.stringify(err, null, 2));
+      context.fail();
     } else {
       console.log("Scan succeeded. Items returned: "+data.Count); //DEBUG
       totalItems=data.Count;
@@ -53,6 +56,7 @@ exports.handler = (event, context, callback) => {
     checkSsl(item.domain.S, 'days', function(err, remaining) {
       if (err) {
         console.error(err);
+        context.fail();
       } else {
   //    console.log(item.domain.S+": "+remaining);
       callback(null, item, remaining);
@@ -63,6 +67,7 @@ exports.handler = (event, context, callback) => {
   function processDomain(err, item, days, callback) {
     if (err) {
       console.error(err);
+      context.fail();
     } else {
       var updateParams = {
         TableName: 'check-ssl-expiration_domains',
@@ -114,10 +119,12 @@ exports.handler = (event, context, callback) => {
 
     if (err) {
       console.error(err);
+      context.fail();
     } else {
       ddb.updateItem(params, function(err, data) {
         if (err) {
           console.error(err, err.stack);
+          context.fail();
         } else {
   //        console.log("Item updated("+params.Key.domain.S+"):"+JSON.stringify(data, null, 2));  //DEBUG
   //        console.log("updateStatus callback: "+typeof callback); //DEBUG
@@ -130,6 +137,7 @@ exports.handler = (event, context, callback) => {
   function notifyEmail(err, domain, status, days, callback) {
     if (err) {
       console.error(err);
+      context.fail();
     } else {
       //console.log("Email: "+JSON.stringify(params, null, 2));  //DEBUG
       console.log("Email: "+domain+" "+status+" "+days+" remaining.");
@@ -158,7 +166,7 @@ exports.handler = (event, context, callback) => {
       ses.sendEmail(emailParams,function(err, data) {
         if (err) {
           console.log("Email did not send."+err); //DEBUG
-          //context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
+          context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
         } else {
           console.log("Email sent."+data);  //DEBUG SES send successful
           complete();
@@ -170,7 +178,10 @@ exports.handler = (event, context, callback) => {
   function complete() {
     processedItems++;
     console.log("processedItems: "+processedItems+" of "+totalItems); //DEBUG
-    if(processedItems==totalItems) console.log("context.done");
+    if(processedItems==totalItems) {
+      console.log("Job well done, mate.");
+      context.succeed(true);
+    }
   } //complete()
 
   getDomains(null, 'check-ssl-expiration_domains');
