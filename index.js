@@ -15,8 +15,8 @@ var ddb = new aws.DynamoDB();
 var ses = new aws.SES();
 
 // Config. Critical and Warning threshholds set in days.
-var crit=14;
-var warn=21;
+var crit=114;
+var warn=221;
 
 // Global
 var totalItems=0;
@@ -81,7 +81,6 @@ exports.handler = (event, context, callback) => {
         ReturnValues:"UPDATED_NEW"
       };
       if(!item.hasOwnProperty('status')) item.status = {'S': 'Unknown'};
-      console.log(item.domain.S+": item.hasOwnProperty('status'): "+item.hasOwnProperty('status')); //DEBUG
       if (days<crit) {
   //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
         if (item.status.S != "CRITICAL") {
