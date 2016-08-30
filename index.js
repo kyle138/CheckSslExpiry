@@ -1,29 +1,25 @@
 'use strict';
 console.log('Loading CheckSslExpiry::');
-console.log('Version 0.4');
-
-//// Local only, this will be replaced by IAM Role in Lambda
-//var ddbOptions = require('./ddbOptions.json');
-var aws = require('aws-sdk');
-aws.config.update({region:'us-east-1'});
-////
+console.log('Version 1.0');
 
 // The required
 var checkSsl = require('check-ssl-expiration');
-//var ddb = new aws.DynamoDB(ddbOptions);
+var aws = require('aws-sdk');
+aws.config.update({region:'us-east-1'});
 var ddb = new aws.DynamoDB();
 var ses = new aws.SES();
 
 // Config. Critical and Warning threshholds set in days.
-var crit=114;
-var warn=221;
+var crit=14;
+var warn=21;
 
-// Global
+// Globals
 var totalItems=0;
 var processedItems=0;
 
 exports.handler = (event, context, callback) => {
 
+  // Scans DynamoDB Table check-ssl-expiration_domains for list of domains to check.
   function getDomains(err, tableName, callback) {
     if (err) {
       console.error("Unable to get domains "+err);
@@ -39,6 +35,7 @@ exports.handler = (event, context, callback) => {
     }
   } //getDomains()
 
+  // Handles results of ddb scan, sets totalItems for complete()
   function onScan(err, data, callback) {
     if (err) {
       console.error("Unable to scan the table. Error JSON: ",JSON.stringify(err, null, 2));
@@ -52,18 +49,21 @@ exports.handler = (event, context, callback) => {
     }
   } //onScan
 
+  // Returns days remaining for requested domain's SSL/TLS certificate
   function getDomainExpiration(err, item, callback) {
     checkSsl(item.domain.S, 'days', function(err, remaining) {
       if (err) {
         console.error(err);
         context.fail();
       } else {
-  //    console.log(item.domain.S+": "+remaining);
       callback(null, item, remaining);
       }
     });
   } //getDomainExpiration()
 
+  // If days remaining is less than crit and status is not already CRITICAL, sets status to CRITICAL in ddb, sends email.
+  // If days remaining is less than warn and status is not already WARNING, sets status to WARNING in ddb, sends email.
+  // Else, if status is not already OK, sets status to OK and sends email.
   function processDomain(err, item, days, callback) {
     if (err) {
       console.error(err);
@@ -82,7 +82,6 @@ exports.handler = (event, context, callback) => {
       };
       if(!item.hasOwnProperty('status')) item.status = {'S': 'Unknown'};
       if (days<crit) {
-  //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
         if (item.status.S != "CRITICAL") {
           updateParams.ExpressionAttributeValues = {
             ":newStatus":{"S":"CRITICAL"}
@@ -92,7 +91,6 @@ exports.handler = (event, context, callback) => {
           complete();
         }
       } else if (days<warn) {
-  //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
         if (item.status.S != "WARNING") {
           updateParams.ExpressionAttributeValues = {
             ":newStatus":{"S":"WARNING"}
@@ -102,7 +100,6 @@ exports.handler = (event, context, callback) => {
           complete();
         }
       } else {
-  //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
         if (item.status.S != "OK") {
           updateParams.ExpressionAttributeValues = {
             ":newStatus":{"S":"OK"}
@@ -115,9 +112,8 @@ exports.handler = (event, context, callback) => {
     }
   } //processDomain()
 
+  // Updates item.status in ddb for each domain.
   function updateStatus(err, params, days, callback) {
-  //  console.log("updateStatus callback: "+typeof callback); //DEBUG
-
     if (err) {
       console.error(err);
       context.fail();
@@ -127,14 +123,13 @@ exports.handler = (event, context, callback) => {
           console.error(err, err.stack);
           context.fail();
         } else {
-  //        console.log("Item updated("+params.Key.domain.S+"):"+JSON.stringify(data, null, 2));  //DEBUG
-  //        console.log("updateStatus callback: "+typeof callback); //DEBUG
           if(typeof callback === 'function' && callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete));
         }
       });
     }
   } //updateStatus()
 
+  // Sends notification emails via SES for domains with a change in status.
   function notifyEmail(err, domain, status, days, callback) {
     if (err) {
       console.error(err);
@@ -146,7 +141,7 @@ exports.handler = (event, context, callback) => {
       var emailBody = "Domain: "+domain+"<br/>\r\nStatus: "+status+"<br/>\r\nExpires in: "+days+" days.<br/>\r\n";
       var emailParams = {
         Destination: {
-              ToAddresses: ["kmunz@hartenergy.com"]
+              ToAddresses: ["webserveralerts@hartenergy.com"]
         },
         Message: {
           Body: {
@@ -169,22 +164,27 @@ exports.handler = (event, context, callback) => {
           console.log("Email did not send."+err); //DEBUG
           context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
         } else {
-          console.log("Email sent."+data);  //DEBUG SES send successful
           complete();
         }
       });
     }
   } //notifyEmail()
 
+  // Keeps track of totalItems returned from DynamoDB onScan.
+  // When processedItems==totalItems, calls context.succeed to shut Lambda down.
   function complete() {
     processedItems++;
-    console.log("processedItems: "+processedItems+" of "+totalItems); //DEBUG
+    console.log("Processed domain "+processedItems+" of "+totalItems); //DEBUG
     if(processedItems==totalItems) {
-      console.log("Job well done, mate.");
+      console.log("All domains processed: EOL");
       context.succeed(true);
     }
   } //complete()
 
+  //////PROCESS BEGINS HERE//////
+  // Calls getDomains() to kick off the whole show
   getDomains(null, 'check-ssl-expiration_domains');
-  callback(null, 'Hello from Lambda');
-};
+
+  //callback(null, 'Hello from Lambda');
+
+};  // exports.handler
