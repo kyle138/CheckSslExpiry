@@ -80,7 +80,7 @@ exports.handler = (event, context, callback) => {
         },
         ReturnValues:"UPDATED_NEW"
       };
-//      if(!item.hasOwnProperty('status.S')) item.status = {'S': 'Unknown'};
+      if(!item.hasOwnProperty('status')) item.status = {'S': 'Unknown'};
       console.log(item.domain.S+": item.hasOwnProperty('status'): "+item.hasOwnProperty('status')); //DEBUG
       if (days<crit) {
   //      console.log(item.domain.S+" status: "+item.status.S+": "+days); //DEBUG
