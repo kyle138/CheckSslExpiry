@@ -148,7 +148,7 @@ exports.handler = (event, context, callback) => {
       var emailBody = "Domain: "+domain+"<br/>\r\nStatus: "+status+"<br/>\r\nExpires in: "+days+" days.<br/>\r\n";
       var emailParams = {
         Destination: {
-              ToAddresses: ["kmunz@hartenergy.com"]
+              ToAddresses: ["webserveralerts@hartenergy.com"]
         },
         Message: {
           Body: {
