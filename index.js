@@ -2,11 +2,15 @@
 console.log('Loading CheckSslExpiry::');
 console.log('Version 1.0');
 
+//// Local only, this will be replaced by IAM Role in Lambda
+//var ddbOptions = require('./ddbOptions.json');
+
 // The required
 var checkSsl = require('check-ssl-expiration');
 var aws = require('aws-sdk');
 aws.config.update({region:'us-east-1'});
-var ddb = new aws.DynamoDB();
+//var ddb = new aws.DynamoDB(ddbOptions); //LOCAL ONLY
+var ddb = new aws.DynamoDB(); //LAMBDA ONLY
 var ses = new aws.SES();
 
 // Config. Critical and Warning threshholds set in days.
@@ -53,8 +57,8 @@ exports.handler = (event, context, callback) => {
   function getDomainExpiration(err, item, callback) {
     checkSsl(item.domain.S, 'days', function(err, remaining) {
       if (err) {
-        console.error(err);
-        context.fail();
+        console.error("Unable to check SSL: ",err);
+        callback(err.code, item, null);
       } else {
       callback(null, item, remaining);
       }
@@ -65,22 +69,25 @@ exports.handler = (event, context, callback) => {
   // If days remaining is less than warn and status is not already WARNING, sets status to WARNING in ddb, sends email.
   // Else, if status is not already OK, sets status to OK and sends email.
   function processDomain(err, item, days, callback) {
-    if (err) {
-      console.error(err);
-      context.fail();
-    } else {
-      var updateParams = {
-        TableName: 'check-ssl-expiration_domains',
-        Key:{
-          "domain": item.domain
-        },
-        UpdateExpression: "SET #stat = :newStatus",
-        ExpressionAttributeNames: {
-          "#stat": "status"
-        },
-        ReturnValues:"UPDATED_NEW"
+    var updateParams = {
+      TableName: 'check-ssl-expiration_domains',
+      Key:{
+        "domain": item.domain
+      },
+      UpdateExpression: "SET #stat = :newStatus",
+      ExpressionAttributeNames: {
+        "#stat": "status"
+      },
+      ReturnValues:"UPDATED_NEW"
+    };
+    if(!item.hasOwnProperty('status')) item.status = {'S': 'Unknown'};
+    if (err) {  // If there was an error with the https request
+      console.error("processDomain error: ",err);
+      updateParams.ExpressionAttributeValues = {
+        ":newStatus":{"S":err}
       };
-      if(!item.hasOwnProperty('status')) item.status = {'S': 'Unknown'};
+      updateStatus(null, updateParams, null, notifyEmail);
+    } else {
       if (days<crit) {
         if (item.status.S != "CRITICAL") {
           updateParams.ExpressionAttributeValues = {
@@ -115,12 +122,12 @@ exports.handler = (event, context, callback) => {
   // Updates item.status in ddb for each domain.
   function updateStatus(err, params, days, callback) {
     if (err) {
-      console.error(err);
+      console.error("updateStatus Error: ",err);
       context.fail();
     } else {
       ddb.updateItem(params, function(err, data) {
         if (err) {
-          console.error(err, err.stack);
+          console.error("ddb.updateItem Error: ",err, err.stack);
           context.fail();
         } else {
           if(typeof callback === 'function' && callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete));
@@ -132,7 +139,7 @@ exports.handler = (event, context, callback) => {
   // Sends notification emails via SES for domains with a change in status.
   function notifyEmail(err, domain, status, days, callback) {
     if (err) {
-      console.error(err);
+      console.error("notifyEmail Error: ",err);
       context.fail();
     } else {
       //console.log("Email: "+JSON.stringify(params, null, 2));  //DEBUG
@@ -141,7 +148,7 @@ exports.handler = (event, context, callback) => {
       var emailBody = "Domain: "+domain+"<br/>\r\nStatus: "+status+"<br/>\r\nExpires in: "+days+" days.<br/>\r\n";
       var emailParams = {
         Destination: {
-              ToAddresses: ["webserveralerts@hartenergy.com"]
+              ToAddresses: ["kmunz@hartenergy.com"]
         },
         Message: {
           Body: {
@@ -163,6 +170,7 @@ exports.handler = (event, context, callback) => {
         if (err) {
           console.log("Email did not send."+err); //DEBUG
           context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
+          complete();
         } else {
           complete();
         }
