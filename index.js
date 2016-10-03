@@ -1,6 +1,6 @@
 'use strict';
 console.log('Loading CheckSslExpiry::');
-console.log('Version 1.0');
+console.log('Version 1.1');
 
 //// Local only, this will be replaced by IAM Role in Lambda
 //var ddbOptions = require('./ddbOptions.json');
