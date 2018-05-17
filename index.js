@@ -54,14 +54,18 @@ exports.handler = (event, context, callback) => {
 
   // Returns days remaining for requested domain's SSL/TLS certificate
   function getDomainExpiration(err, item, callback) {
-    checkSsl(item.domain.S, 'days', function(err, remaining) {
-      if (err) {
-        console.error("Unable to check SSL: ",err);
-        callback(err.code, item, null);
-      } else {
-      callback(null, item, remaining);
-      }
-    });
+    if (err) {
+      console.error("Unable to getDomainExpiration. Error JSON: ",JSON.stringify(err, null, 2));
+    } else {
+      checkSsl(item.domain.S, 'days', function(err, remaining) {
+        if (err) {
+          console.error("Unable to check SSL: ",err);
+          callback(err.code, item, null);
+        } else {
+        callback(null, item, remaining);
+        }
+      });
+    }
   } //getDomainExpiration()
 
   // If days remaining is less than crit and status is not already CRITICAL, sets status to CRITICAL in ddb, sends email.
@@ -183,8 +187,8 @@ exports.handler = (event, context, callback) => {
     processedItems++;
     console.log("Processed domain "+processedItems+" of "+totalItems); //DEBUG
     if(processedItems==totalItems) {
-      console.log("All domains processed: EOL");
-      context.succeed(true);
+      console.log("All domains processed, shut 'er down.'");
+      callback(null, "EOL");  // End the Lambda
     }
   } //complete()
 
