@@ -23,7 +23,6 @@
   },
   "homepage": "https://github.com/kyle138/CheckSslExpiry#readme",
   "dependencies": {
-    "aws-sdk": "^2.242.1",
     "check-ssl-expiration": "^0.1.0"
   }
 }
