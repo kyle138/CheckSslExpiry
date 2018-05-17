@@ -192,6 +192,39 @@ exports.handler = (event, context, callback) => {
     }
   } //complete()
 
+  // Output error information and end the Lambda
+  function handleError(method, response) {
+    var errorMessage = {
+      lambdaFunctionName: context.functionName,
+      eventTimeUTC: new Date().toUTCString(),
+      methodName: method,
+      error: response
+    };
+
+    console.log("errorMessage: "+JSON.stringify(errorMessage, null, 2)); //DEBUG
+
+    // Load the DDB client so we can write to errorLogs
+    const documentClient = new aws.DynamoDB.DocumentClient();
+
+    // ttl value for DDB, item expires after 1 month
+    var ttl = Math.floor(Date.now() / 1000)+2592000;
+
+    // Prepare params for DDB put
+    var params = {
+      TableName: "errorLogs",
+      Item: {
+        ttl: ttl,
+        data: errorMessage
+      }
+    };
+
+    //Now everybody gonna know what you did wrong
+    documentClient.put(params, function(err, data) {
+      if (err) console.log("Unable to add DDB item: "+JSON.stringify(err, null, 2));
+      complete();
+    });
+  } // End handleError
+
   //////PROCESS BEGINS HERE//////
   // Calls getDomains() to kick off the whole show
   getDomains(null, 'check-ssl-expiration_domains');
