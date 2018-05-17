@@ -13,6 +13,8 @@ var ses = new aws.SES();
 // Retrieve from Lambda Environment variables or set default.
 var crit = process.env.crit || 14;
 var warn = process.env.warn || 21;
+var toAdrs = process.env.toAdrs || "kmunz@hartenergy.com";
+console.log(`crit: ${crit} warn: ${warn} toAdrs: ${toAdrs}`);   //DEBUG
 
 // Globals
 var totalItems=0;
@@ -145,7 +147,7 @@ exports.handler = (event, context, callback) => {
       var emailBody = "Domain: "+domain+"<br/>\r\nStatus: "+status+"<br/>\r\nExpires in: "+days+" days.<br/>\r\n";
       var emailParams = {
         Destination: {
-              ToAddresses: ["webserveralerts@hartenergy.com"]
+              ToAddresses: [toAdrs]
         },
         Message: {
           Body: {
