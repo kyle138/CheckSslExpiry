@@ -1,21 +1,18 @@
 'use strict';
 console.log('Loading CheckSslExpiry::');
-console.log('Version 1.1');
-
-//// Local only, this will be replaced by IAM Role in Lambda
-//var ddbOptions = require('./ddbOptions.json');
+console.log('Version 1.2');
 
 // The required
 var checkSsl = require('check-ssl-expiration');
 var aws = require('aws-sdk');
 aws.config.update({region:'us-east-1'});
-//var ddb = new aws.DynamoDB(ddbOptions); //LOCAL ONLY
-var ddb = new aws.DynamoDB(); //LAMBDA ONLY
+var ddb = new aws.DynamoDB();
 var ses = new aws.SES();
 
 // Config. Critical and Warning threshholds set in days.
-var crit=14;
-var warn=21;
+// Retrieve from Lambda Environment variables or set default.
+var crit = process.env.crit || 14;
+var warn = process.env.warn || 21;
 
 // Globals
 var totalItems=0;
