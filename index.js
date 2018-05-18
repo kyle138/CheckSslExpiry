@@ -26,10 +26,10 @@ exports.handler = (event, context, callback) => {
   function getDomains(err, tableName, callback) {
     if (err) {
       console.error("Unable to get domains "+err);
-      context.fail();
+      handleError("getDomains", err, true);
     } else if (!tableName) {
       console.error("getDomains::tableName is a required argument.");
-      context.fail();
+      handleError("getDomains:tableName Required", err, true);
     } else {
       var params = {
         TableName: tableName
@@ -193,12 +193,13 @@ exports.handler = (event, context, callback) => {
   } //complete()
 
   // Output error information and end the Lambda
-  function handleError(method, response) {
+  function handleError(method, response, fatal) {
     var errorMessage = {
       lambdaFunctionName: context.functionName,
       eventTimeUTC: new Date().toUTCString(),
       methodName: method,
-      error: response
+      error: response,
+      fatal: fatal
     };
 
     console.log("errorMessage: "+JSON.stringify(errorMessage, null, 2)); //DEBUG
@@ -221,8 +222,14 @@ exports.handler = (event, context, callback) => {
     //Now everybody gonna know what you did wrong
     documentClient.put(params, function(err, data) {
       if (err) console.log("Unable to add DDB item: "+JSON.stringify(err, null, 2));
-      complete();
+      if(fatal) {
+        console.log("handleError: fatal error. Shutting down Lambda");
+        callback("Fatal Error", null);
+      } else {
+        complete();
+      }
     });
+
   } // End handleError
 
   //////PROCESS BEGINS HERE//////
