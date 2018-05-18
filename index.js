@@ -26,10 +26,10 @@ exports.handler = (event, context, callback) => {
   function getDomains(err, tableName, callback) {
     if (err) {
       console.error("Unable to get domains "+err);
-      context.fail();
+      handleError("getDomains", err, true);
     } else if (!tableName) {
       console.error("getDomains::tableName is a required argument.");
-      context.fail();
+      handleError("getDomains:tableName Required", "Missing required argument", true);
     } else {
       var params = {
         TableName: tableName
@@ -42,7 +42,7 @@ exports.handler = (event, context, callback) => {
   function onScan(err, data, callback) {
     if (err) {
       console.error("Unable to scan the table. Error JSON: ",JSON.stringify(err, null, 2));
-      context.fail();
+      handleError("onSCan", err, true);
     } else {
       console.log("Scan succeeded. Items returned: "+data.Count); //DEBUG
       totalItems=data.Count;
@@ -126,12 +126,12 @@ exports.handler = (event, context, callback) => {
   function updateStatus(err, params, days, callback) {
     if (err) {
       console.error("updateStatus Error: ",err);
-      context.fail();
+      handleError("updateStatus",err);
     } else {
       ddb.updateItem(params, function(err, data) {
         if (err) {
           console.error("ddb.updateItem Error: ",err, err.stack);
-          context.fail();
+          handleError("updateStatus:ddb.updateItem",err);
         } else {
           if(typeof callback === 'function' && callback(null, params.Key.domain.S, data.Attributes.status.S, days, complete));
         }
@@ -143,7 +143,7 @@ exports.handler = (event, context, callback) => {
   function notifyEmail(err, domain, status, days, callback) {
     if (err) {
       console.error("notifyEmail Error: ",err);
-      context.fail();
+      handleError("notifyEmail",err);
     } else {
       //console.log("Email: "+JSON.stringify(params, null, 2));  //DEBUG
       console.log("Email: "+domain+" "+status+" "+days+" remaining.");
@@ -171,9 +171,8 @@ exports.handler = (event, context, callback) => {
       };
       ses.sendEmail(emailParams,function(err, data) {
         if (err) {
-          console.log("Email did not send."+err); //DEBUG
-          context.fail('Error sending email:'+err+err.stack); //an error occurred with SES
-          complete();
+          console.log("Email did not send."+err+err.stack); //an error occurred with SES
+          handleError("notifyEmail:ses.sendEmail",err);
         } else {
           complete();
         }
@@ -192,10 +191,48 @@ exports.handler = (event, context, callback) => {
     }
   } //complete()
 
+  // Output error information and end the Lambda
+  function handleError(method, response, fatal) {
+    var errorMessage = {
+      lambdaFunctionName: context.functionName,
+      eventTimeUTC: new Date().toUTCString(),
+      methodName: method,
+      error: response,
+      fatal: fatal
+    };
+
+    console.log("errorMessage: "+JSON.stringify(errorMessage, null, 2)); //DEBUG
+
+    // Load the DDB client so we can write to errorLogs
+    const documentClient = new aws.DynamoDB.DocumentClient();
+
+    // ttl value for DDB, item expires after 1 month
+    var ttl = Math.floor(Date.now() / 1000)+2592000;
+
+    // Prepare params for DDB put
+    var params = {
+      TableName: "errorLogs",
+      Item: {
+        ttl: ttl,
+        data: errorMessage
+      }
+    };
+
+    //Now everybody gonna know what you did wrong
+    documentClient.put(params, function(err, data) {
+      if (err) console.log("Unable to add DDB item: "+JSON.stringify(err, null, 2));
+      if(fatal) {
+        console.log("handleError: FATAL ERROR - Shutting down Lambda");
+        callback("Fatal Error", null);
+      } else {
+        complete();
+      }
+    });
+
+  } // End handleError
+
   //////PROCESS BEGINS HERE//////
   // Calls getDomains() to kick off the whole show
   getDomains(null, 'check-ssl-expiration_domains');
-
-  //callback(null, 'Hello from Lambda');
 
 };  // exports.handler
